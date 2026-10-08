@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdint.h>
+#include <limits.h>
 #include <stdlib.h>
 
 enum { COIN_COUNT = 8 };
@@ -31,8 +33,15 @@ static int read_value(int *value) {
    finds the optimum without relying on that property. */
 static int calculate_minimum_coins(int value, const int coin_values[],
                                    size_t coin_count, int counts[]) {
-  int *minimum = malloc((size_t)(value + 1) * sizeof(*minimum));
-  int *last_coin = malloc((size_t)(value + 1) * sizeof(*last_coin));
+  /* Check before forming the allocation size: value + 1 in int could
+     overflow, and multiplying by sizeof could overflow size_t. */
+  size_t entries = (size_t)value + 1;
+  if (entries > SIZE_MAX / sizeof(int)) {
+    return -1;
+  }
+
+  int *minimum = malloc(entries * sizeof(*minimum));
+  int *last_coin = malloc(entries * sizeof(*last_coin));
   if (minimum == NULL || last_coin == NULL) {
     free(minimum);
     free(last_coin);
@@ -41,12 +50,13 @@ static int calculate_minimum_coins(int value, const int coin_values[],
 
   minimum[0] = 0;
   last_coin[0] = -1;
-  for (int amount = 1; amount <= value; amount++) {
-    minimum[amount] = value + 1;
+  for (size_t amount = 1; amount < entries; amount++) {
+    minimum[amount] = INT_MAX;
     last_coin[amount] = -1;
     for (size_t i = 0; i < coin_count; i++) {
       int coin = coin_values[i];
-      if (coin <= amount && minimum[amount - coin] + 1 < minimum[amount]) {
+      if ((size_t)coin <= amount && minimum[amount - (size_t)coin] != INT_MAX &&
+          minimum[amount - (size_t)coin] + 1 < minimum[amount]) {
         minimum[amount] = minimum[amount - coin] + 1;
         last_coin[amount] = (int)i;
       }
@@ -56,7 +66,8 @@ static int calculate_minimum_coins(int value, const int coin_values[],
   for (size_t i = 0; i < coin_count; i++) {
     counts[i] = 0;
   }
-  for (int amount = value; amount > 0; amount -= coin_values[last_coin[amount]]) {
+  for (size_t amount = (size_t)value; amount > 0;
+       amount -= (size_t)coin_values[last_coin[amount]]) {
     counts[last_coin[amount]]++;
   }
 
